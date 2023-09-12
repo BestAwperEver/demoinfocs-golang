@@ -37,9 +37,10 @@ type Player struct {
 
 func (p *Player) PlayerPawnEntity() st.Entity {
 	playerPawn, exists := p.Entity.PropertyValue("m_hPlayerPawn")
-	if !exists {
+	if !exists || playerPawn.Handle() == constants.InvalidEntityHandleSource2 {
 		return nil
 	}
+
 	return p.demoInfoProvider.FindEntityByHandle(playerPawn.Handle())
 }
 
@@ -188,6 +189,9 @@ func (p *Player) Weapons() []*Equipment {
 // May not behave as expected with multiple spotters.
 func (p *Player) IsSpottedBy(other *Player) bool {
 	if p.Entity == nil {
+		return false
+	}
+	if p.demoInfoProvider.IsSource2() && p.PlayerPawnEntity() == nil {
 		return false
 	}
 
