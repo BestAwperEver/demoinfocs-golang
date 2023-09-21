@@ -362,8 +362,8 @@ type BombPickup struct {
 	Player *common.Player
 }
 
-// HostageRecued signals that a hostage has been rescued.
-type HostageRecued struct {
+// HostageRescued signals that a hostage has been rescued.
+type HostageRescued struct {
 	Player  *common.Player
 	Hostage *common.Hostage
 }
@@ -658,4 +658,11 @@ type PlayerInfo struct {
 type OvertimeNumberChanged struct {
 	OldCount int
 	NewCount int
+}
+
+// ItemRefund signals a player was refunded for an item.
+// Available with CS2 demos only.
+type ItemRefund struct {
+	Player *common.Player
+	Weapon *common.Equipment
 }

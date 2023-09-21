@@ -488,72 +488,80 @@ func (p *parser) bindNewPlayerControllerS2(controllerEntity st.Entity) {
 }
 
 func (p *parser) bindNewPlayerPawnS2(pawnEntity st.Entity) {
-	controllerHandle := pawnEntity.PropertyValueMust("m_hController").Handle()
-	if controllerHandle == constants.InvalidEntityHandleSource2 {
-		return
-	}
+	var prevControllerHandle uint64
 
-	controllerEntityID := int(controllerHandle & constants.EntityHandleIndexMaskSource2)
-	controllerEntity := p.gameState.playerControllerEntities[controllerEntityID]
-
-	pl := p.getOrCreatePlayerFromControllerEntity(controllerEntity)
-	pl.IsConnected = true
-
-	if pl.SteamID64 != 0 {
-		p.eventDispatcher.Dispatch(events.PlayerConnect{Player: pl})
-	} else {
-		p.eventDispatcher.Dispatch(events.BotConnect{Player: pl})
-	}
-
-	// Position
-	pawnEntity.OnPositionUpdate(func(pos r3.Vector) {
-		if pl.IsAlive() {
-			pl.LastAlivePosition = pos
-		}
-	})
-
-	pawnEntity.Property("m_flFlashDuration").OnUpdate(func(val st.PropertyValue) {
-
-		if val.Float() == 0 {
-			pl.FlashTick = 0
-		} else {
-			pl.FlashTick = p.gameState.ingameTick
+	pawnEntity.Property("m_hController").OnUpdate(func(controllerHandleVal st.PropertyValue) {
+		controllerHandle := controllerHandleVal.Handle()
+		if controllerHandle == constants.InvalidEntityHandleSource2 || controllerHandle == prevControllerHandle {
+			return
 		}
 
-		pl.FlashDuration = val.Float()
+		prevControllerHandle = controllerHandle
 
-		if pl.FlashDuration > 0 {
-			if len(p.gameState.flyingFlashbangs) == 0 {
-				return
+		controllerEntityID := int(controllerHandle & constants.EntityHandleIndexMaskSource2)
+		controllerEntity := p.gameState.playerControllerEntities[controllerEntityID]
+
+		pl := p.getOrCreatePlayerFromControllerEntity(controllerEntity)
+
+		if !pl.IsConnected {
+			pl.IsConnected = true
+
+			if pl.SteamID64 != 0 {
+				p.eventDispatcher.Dispatch(events.PlayerConnect{Player: pl})
+			} else {
+				p.eventDispatcher.Dispatch(events.BotConnect{Player: pl})
+			}
+		}
+
+		// Position
+		pawnEntity.OnPositionUpdate(func(pos r3.Vector) {
+			if pl.IsAlive() {
+				pl.LastAlivePosition = pos
+			}
+		})
+
+		pawnEntity.Property("m_flFlashDuration").OnUpdate(func(val st.PropertyValue) {
+			if val.Float() == 0 {
+				pl.FlashTick = 0
+			} else {
+				pl.FlashTick = p.gameState.ingameTick
 			}
 
-			flashbang := p.gameState.flyingFlashbangs[0]
-			flashbang.flashedEntityIDs = append(flashbang.flashedEntityIDs, pl.EntityID)
+			pl.FlashDuration = val.Float()
+
+			if pl.FlashDuration > 0 {
+				if len(p.gameState.flyingFlashbangs) == 0 {
+					return
+				}
+
+				flashbang := p.gameState.flyingFlashbangs[0]
+				flashbang.flashedEntityIDs = append(flashbang.flashedEntityIDs, pl.EntityID)
+			}
+		})
+
+		p.bindPlayerWeaponsS2(pawnEntity, pl)
+
+		pawnEntity.Property("m_pWeaponServices.m_hActiveWeapon").OnUpdate(func(val st.PropertyValue) {
+			pl.IsReloading = false
+		})
+
+		pawnEntity.Property("m_bIsDefusing").OnUpdate(func(val st.PropertyValue) {
+			pl.IsDefusing = val.BoolVal()
+		})
+
+		spottedByMaskProp := pawnEntity.Property("m_bSpottedByMask.0000")
+		if spottedByMaskProp != nil {
+			spottersChanged := func(val st.PropertyValue) {
+				p.eventDispatcher.Dispatch(events.PlayerSpottersChanged{Spotted: pl})
+			}
+
+			spottedByMaskProp.OnUpdate(spottersChanged)
+			pawnEntity.Property("m_bSpottedByMask.0001").OnUpdate(spottersChanged)
 		}
-	})
 
-	p.bindPlayerWeaponsS2(pawnEntity, pl)
-
-	pawnEntity.Property("m_pWeaponServices.m_hActiveWeapon").OnUpdate(func(val st.PropertyValue) {
-		pl.IsReloading = false
-	})
-
-	pawnEntity.Property("m_bIsDefusing").OnUpdate(func(val st.PropertyValue) {
-		pl.IsDefusing = val.BoolVal()
-	})
-
-	spottedByMaskProp := pawnEntity.Property("m_bSpottedByMask.0000")
-	if spottedByMaskProp != nil {
-		spottersChanged := func(val st.PropertyValue) {
-			p.eventDispatcher.Dispatch(events.PlayerSpottersChanged{Spotted: pl})
-		}
-
-		spottedByMaskProp.OnUpdate(spottersChanged)
-		pawnEntity.Property("m_bSpottedByMask.0001").OnUpdate(spottersChanged)
-	}
-
-	pawnEntity.OnDestroy(func() {
-		pl.IsConnected = false
+		pawnEntity.OnDestroy(func() {
+			pl.IsConnected = false
+		})
 	})
 }
 
@@ -886,7 +894,43 @@ func (p *parser) bindWeaponS2(entity st.Entity) {
 
 	equipment.Entity = entity
 
+	// Used to detect when a player has been refunded for a weapon
+	// This happens when:
+	// - The player is inside the buy zone
+	// - The player's money has increased AND the weapon entity is destroyed at the same tick (unfortunately the money is updated first)
+	var (
+		owner *common.Player
+		oldOwnerMoney int
+		lastMoneyUpdateTick int
+		lastMoneyIncreased bool
+	)
+
+	entity.Property("m_hOwnerEntity").OnUpdate(func(val st.PropertyValue) {
+		weaponOwner := p.GameState().Participants().FindByPawnHandle(val.Handle())
+		if weaponOwner == nil {
+			return
+		}
+
+		owner = weaponOwner
+		oldOwnerMoney = owner.Money()
+
+		owner.Entity.Property("m_pInGameMoneyServices.m_iAccount").OnUpdate(func(val st.PropertyValue) {
+			lastMoneyUpdateTick = p.gameState.ingameTick
+			currentMoney := owner.Money()
+			lastMoneyIncreased = currentMoney > oldOwnerMoney
+			oldOwnerMoney = currentMoney
+		})
+	})
+
 	entity.OnDestroy(func() {
+		if owner != nil && owner.IsInBuyZone() && p.GameState().IngameTick() == lastMoneyUpdateTick && lastMoneyIncreased {
+			p.eventDispatcher.Dispatch(events.ItemRefund{
+				Player: owner,
+				Weapon: equipment,
+			})
+		}
+
+		lastMoneyIncreased = false
 		delete(p.gameState.weapons, entityID)
 	})
 

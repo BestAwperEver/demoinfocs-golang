@@ -372,6 +372,51 @@ func (p *Player) Armor() int {
 	return getInt(p.Entity, "m_ArmorValue")
 }
 
+// RankType returns the current rank type that the player is playing for.
+// CS:GO values:
+// -1 -> Information not present, the demo is too old
+// 0 -> None/not available
+// 6 -> Classic Competitive
+// 7 -> Wingman 2v2
+// 10 -> Danger zone
+//
+// CS2 values:
+// -1 -> Not available, demo probably not coming from a Valve server
+// 0 -> None?
+// 11 -> Classic Competitive
+func (p *Player) RankType() int {
+	if p.demoInfoProvider.IsSource2() {
+		return getInt(p.Entity, "m_iCompetitiveRankType")
+	}
+
+	// This prop is not available in old demos
+	if prop, exists := p.resourceEntity().PropertyValue("m_iCompetitiveRankType." + p.entityIDStr()); exists {
+		return prop.Int()
+	}
+
+	return -1
+}
+
+// Rank returns the current rank of the player for the current RankType.
+// CS:GO demos -> from 0 to 18 (0 = unranked/unknown, 18 = Global Elite)
+// CS2 demos -> Number representation of the player's rank.
+func (p *Player) Rank() int {
+	if p.demoInfoProvider.IsSource2() {
+		return getInt(p.Entity, "m_iCompetitiveRanking")
+	}
+
+	return getInt(p.resourceEntity(), "m_iCompetitiveRanking."+p.entityIDStr())
+}
+
+// CompetitiveWins returns the amount of competitive wins the player has for the current RankType.
+func (p *Player) CompetitiveWins() int {
+	if p.demoInfoProvider.IsSource2() {
+		return getInt(p.Entity, "m_iCompetitiveWins")
+	}
+
+	return getInt(p.resourceEntity(), "m_iCompetitiveWins."+p.entityIDStr())
+}
+
 // Money returns the amount of money in the player's bank.
 func (p *Player) Money() int {
 	if p.demoInfoProvider.IsSource2() {
@@ -459,17 +504,17 @@ func (p *Player) Position() r3.Vector {
 // This is what you get from cl_showpos 1.
 // See also Position().
 func (p *Player) PositionEyes() r3.Vector {
+	if p.demoInfoProvider.IsSource2() {
+		panic("PositionEyes() is not supported for Source 2 demos")
+	}
+
 	if p.Entity == nil {
 		return r3.Vector{}
 	}
 
 	pos := p.Position()
-	if p.demoInfoProvider.IsSource2() {
-		// TODO Find out where we can find the offset in Source 2 demos
-		return pos
-	} else {
-		pos.Z += float64(p.Entity.PropertyValueMust("localdata.m_vecViewOffset[2]").Float())
-	}
+
+	pos.Z += float64(p.Entity.PropertyValueMust("localdata.m_vecViewOffset[2]").Float())
 
 	return pos
 }
@@ -477,8 +522,7 @@ func (p *Player) PositionEyes() r3.Vector {
 // Velocity returns the player's velocity.
 func (p *Player) Velocity() r3.Vector {
 	if p.demoInfoProvider.IsSource2() {
-		// TODO Find out where we can find the velocity in Source 2 demos
-		return r3.Vector{}
+		panic("Velocity() is not supported for Source 2 demos")
 	}
 
 	if p.Entity == nil {
