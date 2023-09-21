@@ -151,6 +151,7 @@ type PlayerJump struct {
 // Kill signals that a player has been killed.
 type Kill struct {
 	Weapon            *common.Equipment
+	WeaponType        common.EquipmentType
 	Victim            *common.Player // May be nil if the demo is partially corrupt (player is 'unconnected', see #156 and #172).
 	Killer            *common.Player // May be nil for world damage (EqWorld) or if the demo is partially corrupt (player is 'unconnected', see #156 and #172).
 	Assister          *common.Player
@@ -419,7 +420,8 @@ type PlayerHurt struct {
 	Health            int
 	Armor             int
 	Weapon            *common.Equipment // May be EqUnknown for world-damage (falling / bomb).
-	WeaponString      string            // Wrong for CZ, M4A1-S etc.
+	WeaponType        common.EquipmentType
+	WeaponString      string // Wrong for CZ, M4A1-S etc.
 	HealthDamage      int
 	ArmorDamage       int
 	HealthDamageTaken int // HealthDamage excluding over-damage (e.g. if player has 5 health and is hit for 15 damage this would be 5 instead of 15)
