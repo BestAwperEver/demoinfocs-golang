@@ -112,6 +112,9 @@ func (p *parser) bindBomb() {
 			if val.BoolVal() {
 				if p.isSource2() {
 					planter := p.gameState.Participants().FindByPawnHandle(bombEntity.PropertyValueMust("m_hOwnerEntity").Handle())
+					if planter == nil {
+						planter = bomb.Carrier
+					}
 					planter.IsPlanting = true
 					p.gameState.currentPlanter = planter
 
@@ -899,10 +902,10 @@ func (p *parser) bindWeaponS2(entity st.Entity) {
 	// - The player is inside the buy zone
 	// - The player's money has increased AND the weapon entity is destroyed at the same tick (unfortunately the money is updated first)
 	var (
-		owner *common.Player
-		oldOwnerMoney int
+		owner               *common.Player
+		oldOwnerMoney       int
 		lastMoneyUpdateTick int
-		lastMoneyIncreased bool
+		lastMoneyIncreased  bool
 	)
 
 	entity.Property("m_hOwnerEntity").OnUpdate(func(val st.PropertyValue) {
