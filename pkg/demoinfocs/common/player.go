@@ -37,11 +37,17 @@ type Player struct {
 
 func (p *Player) PlayerPawnEntity() st.Entity {
 	playerPawn, exists := p.Entity.PropertyValue("m_hPlayerPawn")
-	if !exists || playerPawn.Handle() == constants.InvalidEntityHandleSource2 {
+	handle := playerPawn.Handle()
+	if !exists || handle == constants.InvalidEntityHandleSource2 {
 		return nil
 	}
 
-	return p.demoInfoProvider.FindEntityByHandle(playerPawn.Handle())
+	playerPawnEntity := p.demoInfoProvider.FindEntityByHandle(handle)
+	if playerPawnEntity != nil && playerPawnEntity.ServerClass().Name() == "CCSPlayerPawn" {
+		return playerPawnEntity
+	}
+
+	return nil
 }
 
 func (p *Player) GetTeam() Team {
