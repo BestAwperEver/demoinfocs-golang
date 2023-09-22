@@ -4,6 +4,7 @@ package demoinfocs
 
 import (
 	common "github.com/markus-wa/demoinfocs-golang/v4/pkg/demoinfocs/common"
+	events "github.com/markus-wa/demoinfocs-golang/v4/pkg/demoinfocs/events"
 	st "github.com/markus-wa/demoinfocs-golang/v4/pkg/demoinfocs/sendtables"
 )
 
@@ -48,7 +49,7 @@ type GameState interface {
 	// (Almost?) everything in the game is an entity, such as weapons, players, fire etc.
 	Entities() map[int]st.Entity
 	// Bomb returns the current bomb state.
-	Bomb() *common.Bomb
+	Bomb() *events.Bomb
 	// TotalRoundsPlayed returns the amount of total rounds played according to CCSGameRulesProxy.
 	TotalRoundsPlayed() int
 	// GamePhase returns the game phase of the current game state. See common/gamerules.go for more.

@@ -88,6 +88,7 @@ type parser struct {
 	 */
 	recordingPlayerSlot           int
 	disableMimicSource1GameEvents bool
+	disableMimicSource1BombEvents bool
 
 	// Additional fields, mainly caching & tracking things
 
@@ -349,10 +350,15 @@ type ParserConfig struct {
 	// See MatchInfoDecryptionKey() on how to retrieve the key from `match730_*.dem.info` files.
 	NetMessageDecryptionKey []byte
 
-	// DisableMimicSource1Events tells the parser to not mimic Source 1 game events for Source 2 demos.
+	// DisableMimicSource1GameEvents tells the parser to not mimic Source 1 game events for Source 2 demos.
 	// Unfortunately Source 2 demos *may* not contain Source 1 game events, that's why the parser will try to mimic them.
 	// It has an impact only with Source 2 demos and is false by default.
-	DisableMimicSource1Events bool
+	DisableMimicSource1GameEvents bool
+
+	// DisableMimicSource1BombEvents tells the parser to not mimic Source 1 game events for Source 2 demos.
+	// Unfortunately Source 2 demos *may* not contain Source 1 game events, that's why the parser will try to mimic them.
+	// It has an impact only with Source 2 demos and is false by default.
+	DisableMimicSource1BombEvents bool
 }
 
 // DefaultParserConfig is the default Parser configuration used by NewParser().
@@ -381,7 +387,8 @@ func NewParserWithConfig(demostream io.Reader, config ParserConfig) Parser {
 	p.bombsiteB.index = -1
 	p.decryptionKey = config.NetMessageDecryptionKey
 	p.recordingPlayerSlot = -1
-	p.disableMimicSource1GameEvents = config.DisableMimicSource1Events
+	p.disableMimicSource1GameEvents = config.DisableMimicSource1GameEvents
+	p.disableMimicSource1BombEvents = config.DisableMimicSource1BombEvents
 
 	dispatcherCfg := dp.Config{
 		PanicHandler: func(v any) {

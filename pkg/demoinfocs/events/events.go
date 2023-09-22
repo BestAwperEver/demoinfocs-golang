@@ -290,20 +290,40 @@ type BombEventIf interface {
 	implementsBombEventIf()
 }
 
-type bombsite rune
+type Bombsite rune
 
 // Bombsite identifiers
 const (
-	BomsiteUnknown bombsite = 0
-	BombsiteA      bombsite = 'A'
-	BombsiteB      bombsite = 'B'
+	BomsiteUnknown Bombsite = 0
+	BombsiteA      Bombsite = 'A'
+	BombsiteB      Bombsite = 'B'
 )
 
-// BombEvent contains the common attributes of bomb events. Dont register
+// Bomb tracks the bomb's position, and the player carrying it, if any.
+type Bomb struct {
+	// Intended for internal use only. Use Position() instead.
+	// Contains the last location of the dropped or planted bomb.
+	LastOnGroundPosition r3.Vector
+	Carrier              *common.Player
+	Site                 Bombsite
+}
+
+// Position returns the current position of the bomb.
+// This is either the position of the player holding it
+// or LastOnGroundPosition if it's dropped or planted.
+func (b *Bomb) Position() r3.Vector {
+	if b.Carrier != nil {
+		return b.Carrier.Position()
+	}
+
+	return b.LastOnGroundPosition
+}
+
+// BombEvent contains the common attributes of bomb events. Don't register
 // handlers on this tho, you want BombEventIf for that.
 type BombEvent struct {
 	Player *common.Player
-	Site   bombsite
+	Site   Bombsite
 }
 
 // Make BombEvent implement BombEventIf
@@ -550,7 +570,7 @@ type WarnType int
 
 const (
 	WarnTypeUndefined                  = iota
-	WarnTypeBombsiteUnknown            // may occur on de_grind for bombsite B as the bounding box of the bombsite is wrong
+	WarnTypeBombsiteUnknown            // may occur on de_grind for Bombsite B as the bounding box of the Bombsite is wrong
 	WarnTypeTeamSwapPlayerNil          // TODO: figure out why this happens
 	WarnTypeGameEventBeforeDescriptors // may occur in POV demos
 

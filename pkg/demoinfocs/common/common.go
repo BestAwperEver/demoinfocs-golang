@@ -99,25 +99,6 @@ func NewGrenadeProjectile() *GrenadeProjectile {
 	return &GrenadeProjectile{uniqueID: rand.Int63()} //nolint:gosec
 }
 
-// Bomb tracks the bomb's position, and the player carrying it, if any.
-type Bomb struct {
-	// Intended for internal use only. Use Position() instead.
-	// Contains the last location of the dropped or planted bomb.
-	LastOnGroundPosition r3.Vector
-	Carrier              *Player
-}
-
-// Position returns the current position of the bomb.
-// This is either the position of the player holding it
-// or LastOnGroundPosition if it's dropped or planted.
-func (b *Bomb) Position() r3.Vector {
-	if b.Carrier != nil {
-		return b.Carrier.Position()
-	}
-
-	return b.LastOnGroundPosition
-}
-
 // TeamState contains a team's ID, score, clan name & country flag.
 type TeamState struct {
 	team             Team

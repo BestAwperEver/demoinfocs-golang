@@ -30,7 +30,7 @@ type gameState struct {
 	weapons                      map[int]*common.Equipment         // Maps entity IDs to weapons. Used to remember what a weapon is (p250 / cz etc.)
 	hostages                     map[int]*common.Hostage           // Maps entity-IDs to hostages.
 	entities                     map[int]st.Entity                 // Maps entity IDs to entities
-	bomb                         common.Bomb
+	bomb                         events.Bomb
 	totalRoundsPlayed            int
 	gamePhase                    common.GamePhase
 	isWarmupPeriod               bool
@@ -46,6 +46,7 @@ type gameState struct {
 	lastRoundStartEvent          *events.RoundStart          // Used to dispatch this event after a possible MatchStartedChanged event
 	lastRoundEndEvent            *events.RoundEnd            // Used to dispatch this event before a possible MatchStartedChanged event
 	lastMatchStartedChangedEvent *events.MatchStartedChanged // Used to dispatch this event before a possible RoundStart event and after a possible RoundEnd event
+	//bombEntity                   st.Entity
 	// Used to mimic missing player_blind events for CS2 demos.
 	//
 	// When a player throws a flashbang the following happens:
@@ -175,7 +176,7 @@ func (gs gameState) Entities() map[int]st.Entity {
 }
 
 // Bomb returns the current bomb state.
-func (gs gameState) Bomb() *common.Bomb {
+func (gs gameState) Bomb() *events.Bomb {
 	return &gs.bomb
 }
 

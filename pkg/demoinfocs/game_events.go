@@ -2,6 +2,7 @@ package demoinfocs
 
 import (
 	"fmt"
+	"math"
 
 	"github.com/golang/geo/r3"
 	"github.com/markus-wa/go-unassert"
@@ -442,7 +443,13 @@ func (geh gameEventHandler) playerDeath(data map[string]*msg.CSVCMsg_GameEventKe
 func (geh gameEventHandler) playerHurt(data map[string]*msg.CSVCMsg_GameEventKeyT) {
 	userID := data["userid"].GetValShort()
 	player := geh.playerByUserID32(userID)
+	if player == nil && geh.parser.isSource2() {
+		player = geh.gameState().Participants().FindByPawnHandle(uint64(data["userid_pawn"].GetValLong()))
+	}
 	attacker := geh.playerByUserID32(data["attacker"].GetValShort())
+	if attacker == nil && geh.parser.isSource2() {
+		attacker = geh.gameState().Participants().FindByPawnHandle(uint64(data["attacker_pawn"].GetValLong()))
+	}
 
 	wepType := common.MapEquipment(data["weapon"].GetValString())
 	wepType = geh.attackerWeaponType(wepType, userID)
@@ -656,6 +663,9 @@ func (geh gameEventHandler) playerDisconnect(data map[string]*msg.CSVCMsg_GameEv
 
 func (geh gameEventHandler) playerTeam(data map[string]*msg.CSVCMsg_GameEventKeyT) {
 	player := geh.playerByUserID32(data["userid"].GetValShort())
+	if player == nil && geh.parser.isSource2() {
+		player = geh.gameState().Participants().FindByPawnHandle(uint64(data["userid_pawn"].GetValLong()))
+	}
 	newTeam := common.Team(data["team"].GetValByte())
 
 	if player != nil {
@@ -684,7 +694,7 @@ func (geh gameEventHandler) playerTeam(data map[string]*msg.CSVCMsg_GameEventKey
 }
 
 func (geh gameEventHandler) bombBeginPlant(data map[string]*msg.CSVCMsg_GameEventKeyT) {
-	if geh.parser.isSource2() && !geh.parser.disableMimicSource1GameEvents {
+	if geh.parser.isSource2() && !geh.parser.disableMimicSource1BombEvents {
 		return
 	}
 
@@ -701,7 +711,7 @@ func (geh gameEventHandler) bombBeginPlant(data map[string]*msg.CSVCMsg_GameEven
 }
 
 func (geh gameEventHandler) bombPlanted(data map[string]*msg.CSVCMsg_GameEventKeyT) {
-	if geh.parser.isSource2() && !geh.parser.disableMimicSource1GameEvents {
+	if geh.parser.isSource2() && !geh.parser.disableMimicSource1BombEvents {
 		return
 	}
 
@@ -722,7 +732,7 @@ func (geh gameEventHandler) bombPlanted(data map[string]*msg.CSVCMsg_GameEventKe
 }
 
 func (geh gameEventHandler) bombDefused(data map[string]*msg.CSVCMsg_GameEventKeyT) {
-	if geh.parser.isSource2() && !geh.parser.disableMimicSource1GameEvents {
+	if geh.parser.isSource2() && !geh.parser.disableMimicSource1BombEvents {
 		return
 	}
 
@@ -737,7 +747,7 @@ func (geh gameEventHandler) bombDefused(data map[string]*msg.CSVCMsg_GameEventKe
 }
 
 func (geh gameEventHandler) bombExploded(data map[string]*msg.CSVCMsg_GameEventKeyT) {
-	if geh.parser.isSource2() && !geh.parser.disableMimicSource1GameEvents {
+	if geh.parser.isSource2() && !geh.parser.disableMimicSource1BombEvents {
 		return
 	}
 
@@ -756,38 +766,77 @@ func (geh gameEventHandler) bombExploded(data map[string]*msg.CSVCMsg_GameEventK
 // See https://github.com/markus-wa/demoinfocs-golang/issues/314
 var ErrBombsiteIndexNotFound = errors.New("bombsite index not found - see https://github.com/markus-wa/demoinfocs-golang/issues/314")
 
+func positiveComponents(v r3.Vector) r3.Vector {
+	return r3.Vector{X: math.Max(v.X, 0), Y: math.Max(v.Y, 0), Z: math.Max(v.Z, 0)}
+}
+
+func sumComponents(v r3.Vector) float64 { return v.X + v.Y + v.Z }
+
+func distance(bbi *boundingBoxInformation, point r3.Vector) float64 {
+	diffFromMax := point.Sub(bbi.max)
+	diffFromMin := bbi.min.Sub(point)
+	return sumComponents(positiveComponents(diffFromMax)) + sumComponents(positiveComponents(diffFromMin))
+}
+
 func (geh gameEventHandler) bombEvent(data map[string]*msg.CSVCMsg_GameEventKeyT) (events.BombEvent, error) {
-	bombEvent := events.BombEvent{Player: geh.playerByUserID32(data["userid"].GetValShort())}
+	player := geh.playerByUserID32(data["userid"].GetValShort())
+	if player == nil && geh.parser.isSource2() {
+		player = geh.gameState().Participants().FindByPawnHandle(uint64(data["userid_pawn"].GetValLong()))
+	}
+	bombEvent := events.BombEvent{Player: player}
 
 	const gameEventKeyTypeLong = 3
 
-	var site int
+	var siteIndex int
 	if data["site"].GetType() == gameEventKeyTypeLong {
-		site = int(data["site"].GetValLong())
+		siteIndex = int(data["site"].GetValLong())
 	} else {
-		site = int(data["site"].GetValShort())
+		siteIndex = int(data["site"].GetValShort())
 	}
 
-	switch site {
+	switch siteIndex {
 	case geh.parser.bombsiteA.index:
 		bombEvent.Site = events.BombsiteA
 	case geh.parser.bombsiteB.index:
 		bombEvent.Site = events.BombsiteB
 	default:
-		t := geh.parser.triggers[site]
-
-		// when not found, only error if site is not 0, for retake games it may be 0 => unknown
-		if t == nil {
-			if !geh.ignoreBombsiteIndexNotFound {
-				return bombEvent, errors.Wrapf(ErrBombsiteIndexNotFound, "bombsite with index %d not found", site)
+		site := geh.gameState().bomb.Site
+		if site != events.BomsiteUnknown {
+			bombEvent.Site = site
+			if site == events.BombsiteA {
+				geh.parser.bombsiteA.index = siteIndex
+			} else {
+				geh.parser.bombsiteB.index = siteIndex
 			}
 		} else {
-			if t.contains(geh.parser.bombsiteA.center) {
-				bombEvent.Site = events.BombsiteA
-				geh.parser.bombsiteA.index = site
-			} else if t.contains(geh.parser.bombsiteB.center) {
-				bombEvent.Site = events.BombsiteB
-				geh.parser.bombsiteB.index = site
+			t := geh.parser.triggers[siteIndex]
+
+			if t == nil {
+				if pos := geh.gameState().bomb.Position(); pos.Norm2() > 0 {
+					if geh.parser.bombsiteA.center.Norm2() > 0 && geh.parser.bombsiteB.center.Norm2() > 0 {
+						distanceToA := geh.parser.bombsiteA.center.Sub(pos).Norm2()
+						distanceToB := geh.parser.bombsiteB.center.Sub(pos).Norm2()
+						if distanceToB > distanceToA {
+							bombEvent.Site = events.BombsiteA
+							geh.parser.bombsiteA.index = siteIndex
+						} else {
+							bombEvent.Site = events.BombsiteB
+							geh.parser.bombsiteB.index = siteIndex
+						}
+					}
+				}
+				// when not found, only error if site is not 0, for retake games it may be 0 => unknown
+				if bombEvent.Site == events.BomsiteUnknown && !geh.ignoreBombsiteIndexNotFound {
+					return bombEvent, errors.Wrapf(ErrBombsiteIndexNotFound, "bombsite with index %d not found", site)
+				}
+			} else {
+				if t.contains(geh.parser.bombsiteA.center) {
+					bombEvent.Site = events.BombsiteA
+					geh.parser.bombsiteA.index = siteIndex
+				} else if t.contains(geh.parser.bombsiteB.center) {
+					bombEvent.Site = events.BombsiteB
+					geh.parser.bombsiteB.index = siteIndex
+				}
 			}
 		}
 
@@ -805,11 +854,15 @@ func (geh gameEventHandler) bombEvent(data map[string]*msg.CSVCMsg_GameEventKeyT
 }
 
 func (geh gameEventHandler) bombBeginDefuse(data map[string]*msg.CSVCMsg_GameEventKeyT) {
-	if geh.parser.isSource2() && !geh.parser.disableMimicSource1GameEvents {
+	if geh.parser.isSource2() && !geh.parser.disableMimicSource1BombEvents {
 		return
 	}
 
 	geh.gameState().currentDefuser = geh.playerByUserID32(data["userid"].GetValShort())
+
+	if geh.gameState().currentDefuser == nil {
+		geh.gameState().currentDefuser = geh.gameState().Participants().FindByPawnHandle(uint64(data["userid_pawn"].GetValLong()))
+	}
 
 	geh.dispatch(events.BombDefuseStart{
 		Player: geh.gameState().currentDefuser,
@@ -843,6 +896,9 @@ func (geh gameEventHandler) itemRemove(data map[string]*msg.CSVCMsg_GameEventKey
 
 func (geh gameEventHandler) itemEvent(data map[string]*msg.CSVCMsg_GameEventKeyT) (*common.Player, *common.Equipment) {
 	player := geh.playerByUserID32(data["userid"].GetValShort())
+	if player == nil && geh.parser.isSource2() {
+		player = geh.gameState().Participants().FindByPawnHandle(uint64(data["userid_pawn"].GetValLong()))
+	}
 
 	wepType := common.MapEquipment(data["item"].GetValString())
 	weapon := getPlayerWeapon(player, wepType)
@@ -851,11 +907,14 @@ func (geh gameEventHandler) itemEvent(data map[string]*msg.CSVCMsg_GameEventKeyT
 }
 
 func (geh gameEventHandler) bombDropped(data map[string]*msg.CSVCMsg_GameEventKeyT) {
-	if geh.parser.isSource2() && !geh.parser.disableMimicSource1GameEvents {
+	if geh.parser.isSource2() && !geh.parser.disableMimicSource1BombEvents {
 		return
 	}
 
 	player := geh.playerByUserID32(data["userid"].GetValShort())
+	if player == nil && geh.parser.isSource2() {
+		player = geh.gameState().Participants().FindByPawnHandle(uint64(data["userid_pawn"].GetValLong()))
+	}
 	entityID := int(data["entityid"].GetValShort())
 
 	geh.dispatch(events.BombDropped{
@@ -865,12 +924,16 @@ func (geh gameEventHandler) bombDropped(data map[string]*msg.CSVCMsg_GameEventKe
 }
 
 func (geh gameEventHandler) bombPickup(data map[string]*msg.CSVCMsg_GameEventKeyT) {
-	if geh.parser.isSource2() && !geh.parser.disableMimicSource1GameEvents {
+	if geh.parser.isSource2() && !geh.parser.disableMimicSource1BombEvents {
 		return
+	}
+	player := geh.playerByUserID32(data["userid"].GetValShort())
+	if player == nil && geh.parser.isSource2() {
+		player = geh.gameState().Participants().FindByPawnHandle(uint64(data["userid_pawn"].GetValLong()))
 	}
 
 	geh.dispatch(events.BombPickup{
-		Player: geh.playerByUserID32(data["userid"].GetValShort()),
+		Player: player,
 	})
 }
 
