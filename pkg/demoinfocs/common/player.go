@@ -372,7 +372,7 @@ func (p *Player) Health() int {
 // Armor returns the player's armor points, normally 0-100.
 func (p *Player) Armor() int {
 	if p.demoInfoProvider.IsSource2() {
-		return getInt(p.Entity, "m_iPawnArmor")
+		return getInt(p.PlayerPawnEntity(), "m_ArmorValue")
 	}
 
 	return getInt(p.Entity, "m_ArmorValue")
@@ -781,6 +781,15 @@ func (p *Player) LastPlaceName() string {
 	}
 
 	return getString(p.Entity, "m_szLastPlaceName")
+}
+
+// IsGrabbingHostage returns true if the player is currently grabbing a hostage.
+func (p *Player) IsGrabbingHostage() bool {
+	if p.demoInfoProvider.IsSource2() {
+		return getBool(p.PlayerPawnEntity(), "m_bIsGrabbingHostage")
+	}
+
+	return getBool(p.Entity, "m_bIsGrabbingHostage")
 }
 
 type demoInfoProvider interface {
