@@ -64,6 +64,7 @@ func (inf *Inferno) Thrower() *Player {
 // Some are currently active and some have extinguished (see Fire.IsBurning).
 func (inf *Inferno) Fires() Fires {
 	entity := inf.Entity
+	origin := entity.Position()
 	nFires := entity.PropertyValueMust("m_fireCount").Int()
 	fires := make([]Fire, 0, nFires)
 
@@ -75,8 +76,18 @@ func (inf *Inferno) Fires() Fires {
 		iStr := fmt.Sprintf(iFormat, i)
 
 		fire := Fire{
-			Vector:    entity.PropertyValueMust("m_firePositions." + iStr).R3Vec(),
 			IsBurning: entity.PropertyValueMust("m_bFireIsBurning." + iStr).BoolVal(),
+		}
+
+		if prop := entity.Property("m_firePositions." + iStr); prop != nil {
+			fire.Vector = prop.Value().R3Vec()
+		} else {
+			offset := r3.Vector{
+				X: float64(entity.PropertyValueMust("m_fireXDelta." + iStr).Int()),
+				Y: float64(entity.PropertyValueMust("m_fireYDelta." + iStr).Int()),
+				Z: float64(entity.PropertyValueMust("m_fireZDelta." + iStr).Int()),
+			}
+			fire.Vector = origin.Add(offset)
 		}
 
 		fires = append(fires, fire)
