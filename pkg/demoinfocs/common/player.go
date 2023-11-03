@@ -37,11 +37,17 @@ type Player struct {
 
 func (p *Player) PlayerPawnEntity() st.Entity {
 	playerPawn, exists := p.Entity.PropertyValue("m_hPlayerPawn")
-	if !exists {
+	handle := playerPawn.Handle()
+	if !exists || handle == constants.InvalidEntityHandleSource2 {
 		return nil
 	}
 
-	return p.demoInfoProvider.FindEntityByHandle(playerPawn.Handle())
+	playerPawnEntity := p.demoInfoProvider.FindEntityByHandle(handle)
+	if playerPawnEntity != nil && playerPawnEntity.ServerClass().Name() == "CCSPlayerPawn" {
+		return playerPawnEntity
+	}
+
+	return nil
 }
 
 func (p *Player) GetTeam() Team {
@@ -189,6 +195,9 @@ func (p *Player) Weapons() []*Equipment {
 // May not behave as expected with multiple spotters.
 func (p *Player) IsSpottedBy(other *Player) bool {
 	if p.Entity == nil {
+		return false
+	}
+	if p.demoInfoProvider.IsSource2() && p.PlayerPawnEntity() == nil {
 		return false
 	}
 
@@ -380,7 +389,9 @@ func (p *Player) Armor() int {
 // CS2 values:
 // -1 -> Not available, demo probably not coming from a Valve server
 // 0 -> None?
-// 11 -> Classic Competitive
+// 7 -> Wingman 2v2
+// 11 -> Premier mode
+// 12 -> Classic Competitive
 func (p *Player) RankType() int {
 	if p.demoInfoProvider.IsSource2() {
 		return getInt(p.Entity, "m_iCompetitiveRankType")

@@ -453,6 +453,7 @@ func (geh gameEventHandler) playerDeath(data map[string]*msg.CSVCMsg_GameEventKe
 		IsHeadshot:        data["headshot"].GetValBool(),
 		PenetratedObjects: int(data["penetrated"].GetValShort()),
 		Weapon:            geh.getEquipmentInstance(killer, wepType),
+		WeaponType:        wepType,
 		AssistedFlash:     data["assistedflash"].GetValBool(),
 		AttackerBlind:     data["attackerblind"].GetValBool(),
 		NoScope:           data["noscope"].GetValBool(),
@@ -506,6 +507,7 @@ func (geh gameEventHandler) playerHurt(data map[string]*msg.CSVCMsg_GameEventKey
 		ArmorDamageTaken:  armorDamageTaken,
 		HitGroup:          events.HitGroup(data["hitgroup"].GetValByte()),
 		Weapon:            geh.getEquipmentInstance(attacker, wepType),
+		WeaponType:        wepType,
 	})
 }
 
