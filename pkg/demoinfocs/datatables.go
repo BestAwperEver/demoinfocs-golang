@@ -113,27 +113,32 @@ func (p *parser) bindBomb() {
 			if val.BoolVal() {
 				if p.isSource2() {
 					planter := p.gameState.Participants().FindByPawnHandle(bombEntity.PropertyValueMust("m_hOwnerEntity").Handle())
-					planter.IsPlanting = true
-					p.gameState.currentPlanter = planter
-
-					siteNumber := p.gameState.currentPlanter.PlayerPawnEntity().PropertyValueMust("m_nWhichBombZone").Int()
-					site := events.BomsiteUnknown
-					switch siteNumber {
-					case 1:
-						site = events.BombsiteA
-					case 2:
-						site = events.BombsiteB
-					case 0:
-						site = p.getClosestBombsiteFromPosition(planter.Position())
+					if planter == nil {
+						planter = bomb.Carrier
 					}
+					if planter != nil {
+						planter.IsPlanting = true
+						p.gameState.currentPlanter = planter
 
-					if !p.disableMimicSource1GameEvents {
-						p.eventDispatcher.Dispatch(events.BombPlantBegin{
-							BombEvent: events.BombEvent{
-								Player: p.gameState.currentPlanter,
-								Site:   site,
-							},
-						})
+						siteNumber := p.gameState.currentPlanter.PlayerPawnEntity().PropertyValueMust("m_nWhichBombZone").Int()
+						site := events.BomsiteUnknown
+						switch siteNumber {
+						case 1:
+							site = events.BombsiteA
+						case 2:
+							site = events.BombsiteB
+						case 0:
+							site = p.getClosestBombsiteFromPosition(planter.Position())
+						}
+
+						if !p.disableMimicSource1GameEvents {
+							p.eventDispatcher.Dispatch(events.BombPlantBegin{
+								BombEvent: events.BombEvent{
+									Player: p.gameState.currentPlanter,
+									Site:   site,
+								},
+							})
+						}
 					}
 				} else {
 					p.gameState.currentPlanter = bomb.Carrier
