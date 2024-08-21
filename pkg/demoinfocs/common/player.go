@@ -34,6 +34,7 @@ type Player struct {
 	IsReloading           bool
 	IsUnknown             bool      // Used to identify unknown/broken players. see https://github.com/markus-wa/demoinfocs-golang/issues/162
 	PreviousFramePosition r3.Vector // CS2 only, used to compute velocity as it's not networked in CS2 demos
+	Vel                   r3.Vector // CS2 only, current velocity
 }
 
 func (p *Player) PlayerPawnEntity() st.Entity {

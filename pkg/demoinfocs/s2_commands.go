@@ -386,6 +386,7 @@ func (p *parser) handleDemoFileHeader(msg *msgs2.CDemoFileHeader) {
 
 func (p *parser) updatePlayersPreviousFramePosition() {
 	for _, player := range p.GameState().Participants().Playing() {
+		player.Vel = player.Velocity()
 		player.PreviousFramePosition = player.Position()
 	}
 }
