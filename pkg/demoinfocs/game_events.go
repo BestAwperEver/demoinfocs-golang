@@ -1066,15 +1066,16 @@ func (geh gameEventHandler) attackerWeaponType(wepType common.EquipmentType, vic
 	// if the round ended in the current frame with reason 1 or 0 we assume it was bomb damage
 	// unfortunately RoundEndReasonTargetBombed isn't enough and sometimes we need to check for 0 as well
 	if wepType == common.EqUnknown {
-		switch geh.frameToRoundEndReason[geh.parser.currentFrame] {
-		case 0:
-			fallthrough
-		case events.RoundEndReasonTargetBombed:
-			wepType = common.EqBomb
+		roundEndReason, ok := geh.frameToRoundEndReason[geh.parser.currentFrame]
+		if ok {
+			switch roundEndReason {
+			case 0:
+				fallthrough
+			case events.RoundEndReasonTargetBombed:
+				wepType = common.EqBomb
+			}
 		}
 	}
-
-	unassert.NotSame(wepType, common.EqUnknown)
 
 	return wepType
 }
