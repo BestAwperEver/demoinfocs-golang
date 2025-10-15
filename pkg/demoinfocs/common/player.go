@@ -197,6 +197,25 @@ func (p *Player) Weapons() []*Equipment {
 	return res
 }
 
+// FlashbangCount returns the amount of flashbangs the player currently has in his inventory.
+func (p *Player) FlashbangCount() uint64 {
+	if p.demoInfoProvider.IsSource2() {
+		pawn := p.PlayerPawnEntity()
+		if pawn == nil {
+			return 0
+		}
+
+		flashCountProp, ok := pawn.PropertyValue("m_pWeaponServices.m_iAmmo.0014")
+		if !ok {
+			return 0
+		}
+
+		return flashCountProp.S2UInt64()
+	}
+
+	return uint64(p.Entity.PropertyValueMust("m_iAmmo.015").Int())
+}
+
 // IsSpottedBy returns true if the player has been spotted by the other player.
 // This is NOT "Line of Sight" / FOV - look up "CSGO TraceRay" for that.
 // May not behave as expected with multiple spotters.
@@ -650,6 +669,40 @@ func (p *Player) CrosshairCode() string {
 	val, _ := p.resourceEntity().PropertyValue("m_szCrosshairCodes." + p.entityIDStr())
 
 	return val.StringVal
+}
+
+// ViewmodelOffset returns the player's viewmodel offset as a 3D vector (X, Y, Z).
+// Returns zero vector if not available (CS:GO demos or player not alive).
+func (p *Player) ViewmodelOffset() r3.Vector {
+	if !p.demoInfoProvider.IsSource2() {
+		return r3.Vector{}
+	}
+
+	pawn := p.PlayerPawnEntity()
+	if pawn == nil {
+		return r3.Vector{}
+	}
+
+	return r3.Vector{
+		X: float64(getFloat(pawn, "m_flViewmodelOffsetX")),
+		Y: float64(getFloat(pawn, "m_flViewmodelOffsetY")),
+		Z: float64(getFloat(pawn, "m_flViewmodelOffsetZ")),
+	}
+}
+
+// ViewmodelFOV returns the player's viewmodel field of view.
+// Returns 0 if not available (CS:GO demos or player not alive).
+func (p *Player) ViewmodelFOV() float32 {
+	if !p.demoInfoProvider.IsSource2() {
+		return 0
+	}
+
+	pawn := p.PlayerPawnEntity()
+	if pawn == nil {
+		return 0
+	}
+
+	return getFloat(pawn, "m_flViewmodelFOV")
 }
 
 // Ping returns the players latency to the game server.

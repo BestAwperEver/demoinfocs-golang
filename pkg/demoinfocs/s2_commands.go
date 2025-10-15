@@ -239,6 +239,9 @@ var csUsrMsgCreators = map[msgs2.ECstrike15UserMessages]NetMessageCreator{
 	msgs2.ECstrike15UserMessages_CS_UM_CurrentRoundOdds:             func() proto.Message { return &msgs2.CCSUsrMsg_CurrentRoundOdds{} },
 	msgs2.ECstrike15UserMessages_CS_UM_DeepStats:                    func() proto.Message { return &msgs2.CCSUsrMsg_DeepStats{} },
 	msgs2.ECstrike15UserMessages_CS_UM_ShootInfo:                    func() proto.Message { return &msgs2.CCSUsrMsg_ShootInfo{} },
+	msgs2.ECstrike15UserMessages_CS_UM_CounterStrafe:                func() proto.Message { return &msgs2.CCSUsrMsg_CounterStrafe{} },
+	msgs2.ECstrike15UserMessages_CS_UM_DamagePrediction:             func() proto.Message { return &msgs2.CCSUsrMsg_DamagePrediction{} },
+	msgs2.ECstrike15UserMessages_CS_UM_RecurringMissionSchema:       func() proto.Message { return &msgs2.CCSUsrMsg_RecurringMissionSchema{} },
 }
 
 var teCreators = map[msgs2.ETEProtobufIds]NetMessageCreator{
@@ -268,6 +271,13 @@ var teCreators = map[msgs2.ETEProtobufIds]NetMessageCreator{
 	msgs2.ETEProtobufIds_TE_PlayerDecalId:    func() proto.Message { return &msgs2.CMsgTEPlayerDecal{} },
 	msgs2.ETEProtobufIds_TE_ProjectedDecalId: func() proto.Message { return &msgs2.CMsgTEProjectedDecal{} },
 	msgs2.ETEProtobufIds_TE_SmokeId:          func() proto.Message { return &msgs2.CMsgTESmoke{} },
+}
+
+var bidirectionalMessageCreators = map[msgs2.Bidirectional_Messages]NetMessageCreator{
+	msgs2.Bidirectional_Messages_bi_RebroadcastGameEvent: func() proto.Message { return &msgs2.CBidirMsg_RebroadcastGameEvent{} },
+	msgs2.Bidirectional_Messages_bi_RebroadcastSource:    func() proto.Message { return &msgs2.CBidirMsg_RebroadcastSource{} },
+	msgs2.Bidirectional_Messages_bi_GameEvent:            func() proto.Message { return &msgs2.CBidirMsg_RebroadcastGameEvent{} },
+	msgs2.Bidirectional_Messages_bi_PredictionEvent:      func() proto.Message { return &msgs2.CBidirMsg_PredictionEvent{} },
 }
 
 type pendingMessage struct {
@@ -325,6 +335,9 @@ func (p *parser) handleDemoPacket(pack *msgs2.CDemoPacket) {
 
 		if m.t < int32(msgs2.SVC_Messages_svc_ServerInfo) {
 			msgCreator = netMsgCreators[msgs2.NET_Messages(m.t)]
+			if msgCreator == nil {
+				msgCreator = bidirectionalMessageCreators[msgs2.Bidirectional_Messages(m.t)]
+			}
 		} else if m.t < int32(msgs2.EBaseUserMessages_UM_AchievementEvent) {
 			msgCreator = svcMsgCreators[msgs2.SVC_Messages(m.t)]
 		} else if m.t < int32(msgs2.EBaseGameEvents_GE_VDebugGameSessionIDEvent) {
@@ -386,8 +399,11 @@ func getGameEventListBinForProtocol(networkProtocol int) ([]byte, error) {
 	case networkProtocol < 14069:
 		return eventListFolder.ReadFile("event-list-dump/14023.bin")
 
-	default:
+	case networkProtocol < 14089:
 		return eventListFolder.ReadFile("event-list-dump/14070.bin")
+
+	default:
+		return eventListFolder.ReadFile("event-list-dump/14089.bin")
 	}
 }
 

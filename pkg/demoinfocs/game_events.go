@@ -252,6 +252,7 @@ func newGameEventHandler(parser *parser, ignoreBombsiteIndexNotFound bool) gameE
 		"player_activate":                 nil,                                   // CS2 POV demos
 		"player_blind":                    delay(geh.playerBlind),                // Player got blinded by a flash. Delayed because Player.FlashDuration hasn't been updated yet
 		"player_changename":               nil,                                   // Name change
+		"player_chat":                     nil,                                   // CS2 only, not always present and ChatMessage events are already dispatched through CUserMessageSayText2
 		"player_connect":                  geh.playerConnect,                     // Bot connected or player reconnected, players normally come in via string tables & data tables
 		"player_connect_full":             nil,                                   // Connecting finished
 		"player_death":                    delayIfNoPlayers(geh.playerDeath),     // Player died
@@ -324,7 +325,7 @@ func (geh gameEventHandler) clearGrenadeProjectiles() {
 	}
 
 	// Thrown grenades could not be deleted at the end of the round (if they are thrown at the very end, they never get destroyed)
-	geh.gameState().thrownGrenades = make(map[*common.Player][]*common.Equipment)
+	geh.gameState().thrownGrenades = make(map[*common.Player]map[common.EquipmentType][]*common.Equipment)
 	geh.gameState().flyingFlashbangs = make([]*FlyingFlashbang, 0)
 }
 
@@ -469,6 +470,11 @@ func (geh gameEventHandler) playerDeath(data map[string]*msg.CSVCMsg_GameEventKe
 	wepType := common.MapEquipment(data["weapon"].GetValString())
 	victimUserID := data["userid"].GetValShort()
 	wepType = geh.attackerWeaponType(wepType, victimUserID)
+
+	if killer == nil && data["attacker_pawn"] != nil {
+		// CS2 only, fallback to pawn handle if the killer was not found by its user ID
+		killer = geh.parser.gameState.Participants().FindByPawnHandle(uint64(data["attacker_pawn"].GetValLong()))
+	}
 
 	geh.dispatch(events.Kill{
 		Victim:            geh.playerByUserID32(data["userid"].GetValShort()),
@@ -997,7 +1003,18 @@ func (geh gameEventHandler) bombPickup(data map[string]*msg.CSVCMsg_GameEventKey
 
 // Just so we can nicely create GrenadeEvents in one line
 func (geh gameEventHandler) nadeEvent(data map[string]*msg.CSVCMsg_GameEventKeyT, nadeType common.EquipmentType) events.GrenadeEvent {
-	thrower := geh.playerByUserID32(data["userid"].GetValShort())
+	var thrower *common.Player
+	// Sometimes only the position and the entityid are present.
+	// Since GetValShort() returns 0 for nil values, the thrower would be the player with UserID 0, so we need to check for the existence of the key.
+	if data["userid"] != nil {
+		thrower = geh.playerByUserID32(data["userid"].GetValShort())
+	}
+
+	// CS2 only - userid may be missing, but userid_pawn present.
+	if thrower == nil && data["userid_pawn"] != nil {
+		thrower = geh.gameState().Participants().FindByPawnHandle(uint64(data["userid_pawn"].GetValLong()))
+	}
+
 	position := r3.Vector{
 		X: float64(data["x"].GetValFloat()),
 		Y: float64(data["y"].GetValFloat()),
@@ -1021,7 +1038,11 @@ func (geh gameEventHandler) addThrownGrenade(p *common.Player, wep *common.Equip
 	}
 
 	gameState := geh.gameState()
-	gameState.thrownGrenades[p] = append(gameState.thrownGrenades[p], wep)
+	if gameState.thrownGrenades[p] == nil {
+		gameState.thrownGrenades[p] = make(map[common.EquipmentType][]*common.Equipment)
+	}
+
+	gameState.thrownGrenades[p][wep.Type] = append(gameState.thrownGrenades[p][wep.Type], wep)
 }
 
 func (geh gameEventHandler) getThrownGrenade(p *common.Player, wepType common.EquipmentType) *common.Equipment {
@@ -1030,14 +1051,32 @@ func (geh gameEventHandler) getThrownGrenade(p *common.Player, wepType common.Eq
 		return nil
 	}
 
-	// Get the first weapon we found for this player with this weapon type
-	for _, thrownGrenade := range geh.gameState().thrownGrenades[p] {
-		if isSameEquipmentElement(thrownGrenade.Type, wepType) {
-			return thrownGrenade
+	playerGrenades := geh.gameState().thrownGrenades[p]
+	grenades := playerGrenades[wepType]
+
+	if len(grenades) == 0 {
+		// Molotovs/incendiaries may be reported as the opposite type in game-events. (i.e. incendiary reported as molotov and vice versa)
+		switch wepType { //nolint:exhaustive
+		case common.EqIncendiary:
+			grenades = playerGrenades[common.EqMolotov]
+		case common.EqMolotov:
+			grenades = playerGrenades[common.EqIncendiary]
 		}
 	}
 
-	return nil
+	if len(grenades) == 0 {
+		// The player might be controlling a bot, in such case the thrown grenade is stored in the bot's state.
+		bot := p.ControlledBot()
+		if bot != nil && bot.SteamID64 != p.SteamID64 {
+			return geh.getThrownGrenade(bot, wepType)
+		}
+	}
+
+	if len(grenades) == 0 {
+		return nil
+	}
+
+	return grenades[len(grenades)-1]
 }
 
 func (geh gameEventHandler) deleteThrownGrenade(p *common.Player, wepType common.EquipmentType) {
@@ -1046,16 +1085,20 @@ func (geh gameEventHandler) deleteThrownGrenade(p *common.Player, wepType common
 		return
 	}
 
-	gameState := geh.gameState()
+	playerGrenades := geh.gameState().thrownGrenades[p]
+	if len(playerGrenades) == 0 {
+		return
+	}
 
-	// Delete the first weapon we found with this weapon type
-	for i, weapon := range gameState.thrownGrenades[p] {
-		// If same weapon type
-		// OR if it's an EqIncendiary we must check for EqMolotov too because of geh.infernoExpire() handling ?
-		if isSameEquipmentElement(wepType, weapon.Type) {
-			gameState.thrownGrenades[p] = append(gameState.thrownGrenades[p][:i], gameState.thrownGrenades[p][i+1:]...)
-			return
-		}
+	grenades := playerGrenades[wepType]
+	if len(grenades) == 0 {
+		return
+	}
+
+	// Delete the first grenade thrown by the player and this grenade type.
+	playerGrenades[wepType] = grenades[:len(grenades)-1]
+	if len(playerGrenades[wepType]) == 0 {
+		delete(playerGrenades, wepType)
 	}
 }
 
@@ -1089,13 +1132,6 @@ func (geh gameEventHandler) getEquipmentInstance(player *common.Player, wepType 
 	}
 
 	return getPlayerWeapon(player, wepType)
-}
-
-// checks if two EquipmentElements are the same, considering that incendiary and molotov should be treated as identical
-func isSameEquipmentElement(a common.EquipmentType, b common.EquipmentType) bool {
-	return a == b ||
-		(a == common.EqIncendiary && b == common.EqMolotov) ||
-		(b == common.EqIncendiary && a == common.EqMolotov)
 }
 
 // Returns the players instance of the weapon if applicable or a new instance otherwise.
