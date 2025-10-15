@@ -16,7 +16,7 @@ require (
 	github.com/samber/lo v1.47.0
 	github.com/stretchr/testify v1.10.0
 	golang.org/x/exp v0.0.0-20230817173708-d852ddb80c63
-	google.golang.org/protobuf v1.36.4
+	google.golang.org/protobuf v1.36.10
 )
 
 require (
@@ -29,4 +29,6 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-go 1.21
+go 1.25
+
+toolchain go1.25.3
