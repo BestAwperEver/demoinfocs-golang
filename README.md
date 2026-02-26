@@ -192,16 +192,20 @@ There is one caveat however: Beta features - which are marked as such via commen
 ## Services, Projects & Companies Using demoinfocs-golang
 
 - [noesis.gg](https://www.noesis.gg/) - A suite of explorative tools to help you analyze and improve your CS2 performance
+- [fastcup.net](https://fastcup.net/) — CS2 matchmaking & tournament platform with match stats, demo analysis, and automatic highlight rendering
 - [esportal.com](https://esportal.com/) - An alternative Matchmaking service that aims to provide a friendly environment free from trolls and misbehaving individuals
 - [pglesports.com](https://www.pglesports.com/) - Premier eSports tournaments and circuits for massive audiences
 - [hltv.org](https://www.hltv.org/) - Leading Counter-Strike site featuring news, demos, pictures, statistics, on-site coverage and more
 - [refrag.gg](https://refrag.gg/) - The world's premier CS2 training tool
 - [esportslab.gg](https://esportslab.gg/) - Building ML/AI tools for professional esports players
 - [scope.gg](https://scope.gg/) - Analytical and advisory service for advanced CS2 players
+- [clutchkings.gg](https://www.clutchkings.gg/) - A project that helps CS2 players create and share gameplay clips easily
 - [PureSkill.gg](https://pureskill.gg/) - An automated coach to help you get better at CS2
 - [cs2lens.com](https://www.cs2lens.com/) - Professional CS2 demo replayer and analysis tool
 - [awpy](https://github.com/pnxenopoulos/awpy) - A wrapper for the Golang parser in Python
 - [CS2VoiceData](https://github.com/DandrewsDev/CS2VoiceData) - Extract voice communications from demos
+- [CSC](https://csconfederation.com/) - A free league in NA providing a casual yet competitive environment
+- [csskill.com](https://csskill.com/) - A CS2 performance and analytics platform featuring live demo parsing, 2D replay visualization, achievement tracking, and engagement-driven competitive features.
 
 ### CS:GO projects (may no longer work with CS2)
 

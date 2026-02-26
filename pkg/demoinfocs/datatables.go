@@ -58,9 +58,22 @@ func (p *parser) bindBomb() {
 		bombEntity.Property("m_bStartedArming").OnUpdate(func(val st.PropertyValue) {
 			if val.BoolVal() {
 				planterHandle := bombEntity.PropertyValueMust("m_hOwnerEntity").Handle()
-				ctlHandle := p.gameState.entities[entityIDFromHandle(planterHandle)].PropertyValueMust("m_hController").Handle()
-				ctlID := p.gameState.entities[entityIDFromHandle(ctlHandle)].ID()
+				pawnEntity := p.gameState.entities[entityIDFromHandle(planterHandle)]
+				if pawnEntity == nil {
+					return
+				}
+
+				ctlHandle := pawnEntity.PropertyValueMust("m_hController").Handle()
+				ctlEntity := p.gameState.entities[entityIDFromHandle(ctlHandle)]
+				if ctlEntity == nil {
+					return
+				}
+
+				ctlID := ctlEntity.ID()
 				planter := p.gameState.playersByEntityID[ctlID]
+				if planter == nil {
+					return
+				}
 
 				planter.IsPlanting = true
 				p.gameState.currentPlanter = planter
@@ -518,6 +531,24 @@ func (p *parser) bindNewPlayerPawn(pawnEntity st.Entity) {
 		spottedByMaskProp.OnUpdate(spottersChanged)
 		pawnEntity.Property("m_bSpottedByMask.0001").OnUpdate(spottersChanged)
 	}
+
+	buttonDownMaskProp := pawnEntity.Property("m_pMovementServices.m_nButtonDownMaskPrev")
+	if buttonDownMaskProp != nil {
+		buttonDownMaskProp.OnUpdate(func(val st.PropertyValue) {
+			pl := getPlayerFromPawnEntity(pawnEntity)
+			if pl == nil {
+				return
+			}
+
+			state := val.UInt64()
+			pl.ButtonsPressedState = state
+
+			p.eventDispatcher.Dispatch(events.PlayerButtonsStateUpdate{
+				Player:       pl,
+				ButtonsState: state,
+			})
+		})
+	}
 }
 
 func (p *parser) bindPlayerWeapons(pawnEntity st.Entity, pl *common.Player) {
@@ -679,10 +710,12 @@ func (p *parser) bindGrenadeProjectiles(entity st.Entity) {
 
 		p.gameEventHandler.addThrownGrenade(proj.Thrower, proj.WeaponInstance)
 
-		p.gameState.flyingFlashbangs = append(p.gameState.flyingFlashbangs, &FlyingFlashbang{
-			projectile:       proj,
-			flashedEntityIDs: []int{},
-		})
+		if proj.WeaponInstance.Type == common.EqFlash {
+			p.gameState.flyingFlashbangs = append(p.gameState.flyingFlashbangs, &FlyingFlashbang{
+				projectile:       proj,
+				flashedEntityIDs: []int{},
+			})
+		}
 
 		proj.Trajectory = append(proj.Trajectory, common.TrajectoryEntry{
 			Tick:     p.gameState.ingameTick,
