@@ -67,6 +67,7 @@ func (p *parser) handleGameEvent(ge *msg.CMsgSource1LegacyGameEvent) {
 type gameEventHandler struct {
 	parser                      *parser
 	gameEventNameToHandler      map[string]gameEventHandlerFunc
+	frameToBombExploded         map[int]bool
 	userIDToFallDamageFrame     map[int32]int
 	frameToRoundEndReason       map[int]events.RoundEndReason
 	ignoreBombsiteIndexNotFound bool // see https://github.com/markus-wa/demoinfocs-golang/issues/314
@@ -108,6 +109,7 @@ type gameEventHandlerFunc func(map[string]*msg.CMsgSource1LegacyGameEventKeyT)
 func newGameEventHandler(parser *parser, ignoreBombsiteIndexNotFound bool) gameEventHandler {
 	geh := gameEventHandler{
 		parser:                      parser,
+		frameToBombExploded:         make(map[int]bool),
 		userIDToFallDamageFrame:     make(map[int32]int),
 		frameToRoundEndReason:       make(map[int]events.RoundEndReason),
 		ignoreBombsiteIndexNotFound: ignoreBombsiteIndexNotFound,
@@ -440,8 +442,8 @@ func (geh gameEventHandler) playerHurt(data map[string]*msg.CMsgSource1LegacyGam
 	player := geh.playerByUserID32(userID)
 	attacker := geh.playerByUserID32(data["attacker"].GetValShort())
 
-	wepType := common.MapEquipment(data["weapon"].GetValString())
-	wepType = geh.attackerWeaponType(wepType, userID)
+	rawWeapon := data["weapon"].GetValString()
+	wepType := common.MapEquipment(rawWeapon)
 
 	health := int(data["health"].GetValByte())
 	armor := int(data["armor"].GetValByte())
@@ -469,18 +471,41 @@ func (geh gameEventHandler) playerHurt(data map[string]*msg.CMsgSource1LegacyGam
 		}
 	}
 
-	geh.dispatch(events.PlayerHurt{
-		Player:            player,
-		Attacker:          attacker,
-		Health:            health,
-		Armor:             armor,
-		HealthDamage:      healthDamage,
-		ArmorDamage:       armorDamage,
-		HealthDamageTaken: healthDamageTaken,
-		ArmorDamageTaken:  armorDamageTaken,
-		HitGroup:          events.HitGroup(data["hitgroup"].GetValByte()),
-		Weapon:            geh.getEquipmentInstance(attacker, wepType),
-	})
+	dispatchPlayerHurt := func(wepType common.EquipmentType) {
+		geh.dispatch(events.PlayerHurt{
+			Player:            player,
+			Attacker:          attacker,
+			Health:            health,
+			Armor:             armor,
+			HealthDamage:      healthDamage,
+			ArmorDamage:       armorDamage,
+			HealthDamageTaken: healthDamageTaken,
+			ArmorDamageTaken:  armorDamageTaken,
+			HitGroup:          events.HitGroup(data["hitgroup"].GetValByte()),
+			Weapon:            geh.getEquipmentInstance(attacker, wepType),
+			WeaponString:      rawWeapon,
+		})
+	}
+
+	if rawWeapon == "" && wepType == common.EqUnknown {
+		geh.parser.delayedEventHandlers = append(geh.parser.delayedEventHandlers, func() {
+			resolvedType := geh.attackerWeaponType(wepType, userID)
+			if resolvedType == common.EqUnknown {
+				if geh.frameToBombExploded[geh.parser.currentFrame] {
+					resolvedType = common.EqBomb
+				} else {
+					resolvedType = common.EqWorld
+				}
+			}
+
+			dispatchPlayerHurt(resolvedType)
+		})
+
+		return
+	}
+
+	wepType = geh.attackerWeaponType(wepType, userID)
+	dispatchPlayerHurt(wepType)
 }
 
 func (geh gameEventHandler) playerFallDamage(data map[string]*msg.CMsgSource1LegacyGameEventKeyT) {
@@ -762,6 +787,7 @@ func (geh gameEventHandler) bombExploded(data map[string]*msg.CMsgSource1LegacyG
 		return
 	}
 
+	geh.frameToBombExploded[geh.parser.currentFrame] = true
 	geh.gameState().currentDefuser = nil
 	geh.dispatch(events.BombExplode{BombEvent: bombEvent})
 }
