@@ -442,6 +442,44 @@ func componentDecoder(r *reader) interface{} {
 	return r.readBits(1)
 }
 
+// The fixedN encoders send N raw bits instead of a varint; values keep the Go type of the varint decoder, which callers assert.
+func fixedWidth(f *field, varint fieldDecoder) fieldDecoder {
+	var n uint32
+
+	switch f.encoder {
+	case "fixed8":
+		n = 8
+	case "fixed16":
+		n = 16
+	case "fixed32":
+		n = 32
+	default:
+		return varint
+	}
+
+	probe := newReader(make([]byte, 8))
+	defer probe.release()
+
+	switch varint(probe).(type) {
+	case int32:
+		shift := 32 - n
+
+		return func(r *reader) interface{} {
+			return int32(r.readBits(n)<<shift) >> shift //nolint:gosec
+		}
+	case uint32:
+		return func(r *reader) interface{} {
+			return r.readBits(n)
+		}
+	case uint64:
+		return func(r *reader) interface{} {
+			return uint64(r.readBits(n))
+		}
+	}
+
+	return varint
+}
+
 func findDecoder(f *field) fieldDecoder {
 	if v, ok := fieldTypeFactories[f.fieldType.baseType]; ok {
 		return v(f)
@@ -452,10 +490,10 @@ func findDecoder(f *field) fieldDecoder {
 	}
 
 	if v, ok := fieldTypeDecoders[f.fieldType.baseType]; ok {
-		return v
+		return fixedWidth(f, v)
 	}
 
-	return defaultDecoder
+	return fixedWidth(f, defaultDecoder)
 }
 
 func findDecoderByBaseType(f *field) fieldDecoder {
@@ -464,8 +502,8 @@ func findDecoderByBaseType(f *field) fieldDecoder {
 	}
 
 	if v, ok := fieldTypeDecoders[f.fieldType.genericType.baseType]; ok {
-		return v
+		return fixedWidth(f, v)
 	}
 
-	return defaultDecoder
+	return fixedWidth(f, defaultDecoder)
 }
